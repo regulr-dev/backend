@@ -3,7 +3,6 @@
   "framework": null,
   "installCommand": "npm ci",
   "buildCommand": "npm run vercel-build",
-  "outputDirectory": "web/dist",
   "regions": [
     "fra1"
   ],
@@ -15,20 +14,8 @@
   },
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "/api"
-    },
-    {
-      "source": "/t/:path*",
-      "destination": "/api"
-    },
-    {
-      "source": "/wallet-art/:path*",
-      "destination": "/api"
-    },
-    {
       "source": "/(.*)",
-      "destination": "/index.html"
+      "destination": "/api"
     }
   ]
 }

@@ -27,3 +27,4 @@ The API runs on `http://localhost:3001`.
 - `npm test` - Run unit tests (NFC crypto, Wallet engine, Promotions)
 - `npm run db:migrate` - Run Prisma database migrations locally
 - `npm run tag:key -- <UID>` - Derive NTAG 424 DNA encryption keys
+
