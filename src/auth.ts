@@ -14,11 +14,20 @@ const googleClient = new OAuth2Client();
 // Long-lived cookie so a returning customer is recognised the moment the cashier taps.
 function setSession(res: Response, userId: string) {
   const token = jwt.sign({ sub: userId }, config.sessionSecret, { expiresIn: '365d' });
-  res.cookie(COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: config.isProd, maxAge: ONE_YEAR_MS });
+  res.cookie(COOKIE, token, {
+    httpOnly: true,
+    sameSite: config.isProd ? 'none' : 'lax',
+    secure: config.isProd,
+    maxAge: ONE_YEAR_MS,
+  });
 }
 
 export function clearSession(res: Response) {
-  res.clearCookie(COOKIE, { httpOnly: true, sameSite: 'lax', secure: config.isProd });
+  res.clearCookie(COOKIE, {
+    httpOnly: true,
+    sameSite: config.isProd ? 'none' : 'lax',
+    secure: config.isProd,
+  });
 }
 
 export async function getUser(req: Request): Promise<User | null> {
