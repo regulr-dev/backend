@@ -3,6 +3,7 @@
   "framework": null,
   "installCommand": "npm ci",
   "buildCommand": "npm run vercel-build",
+  "outputDirectory": "public",
   "regions": [
     "fra1"
   ],
