@@ -1,0 +1,214 @@
+// Postgres everywhere (Neon on Vercel). Schema changes go through migrations:
+//   npx prisma migrate dev --name <what-changed>   (locally, creates prisma/migrations/...)
+// Vercel applies them on deploy with `prisma migrate deploy`.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection for the app; direct one for migrations (Neon sets both on Vercel).
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+model User {
+  id          String       @id @default(cuid())
+  email       String       @unique
+  name        String?
+  googleSub   String?      @unique
+  // Optional, for shops' birthday bonus. Month 1-12, day 1-31 (no year: we don't need an age).
+  birthMonth  Int?
+  birthDay    Int?
+  createdAt   DateTime     @default(now())
+  memberships Membership[]
+  stores      Store[]
+}
+
+model Store {
+  id                   String       @id @default(cuid())
+  slug                 String       @unique
+  name                 String
+  ownerId              String
+  owner                User         @relation(fields: [ownerId], references: [id])
+  logoUrl              String?
+  // Photo behind the reward ladder on the card (uploads/covers).
+  coverUrl             String?
+  bgColor              String       @default("#1f2937")
+  textColor            String       @default("#ffffff")
+  welcomeStamps        Int          @default(1)
+  stampCooldownMinutes Int          @default(120)
+  // Public profile, shown on the customer map and store page.
+  description          String?
+  address              String?
+  phone                String?
+  latitude             Float?
+  longitude            Float?
+  // JSON: 7 entries, Monday first: { closed, open: "08:00", close: "18:00" }
+  hours                String?
+  // IANA timezone for opening hours, happy hours and birthdays.
+  timezone             String       @default("Europe/Budapest")
+  // Extra stamps on a visit within 3 days of the customer's birthday (0 = off).
+  birthdayStamps       Int          @default(0)
+  createdAt            DateTime     @default(now())
+  rewards              Reward[]
+  tags                 NfcTag[]
+  memberships          Membership[]
+  messages             Message[]
+  promotions           Promotion[]
+  taps                 TapSession[]
+  events               StampEvent[]
+}
+
+model Reward {
+  id               String    @id @default(cuid())
+  storeId          String
+  store            Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name             String
+  description      String?
+  cost             Int
+  // One of the icons in shared/stampArt.ts (REWARD_ICONS).
+  icon             String    @default("gift")
+  active           Boolean   @default(true)
+  // Limited-time rewards: only claimable between these (null = no limit).
+  startsAt         DateTime?
+  endsAt           DateTime?
+  // How many times one customer can claim it (null = no limit).
+  perCustomerLimit Int?
+  createdAt        DateTime  @default(now())
+}
+
+// A physical NFC card kept behind the counter.
+// mode "static": plain URL with a secret (prototype only, the URL can be copied).
+// mode "sun":    NTAG 424 DNA, every tap produces a one-time signed URL.
+model NfcTag {
+  id          String       @id @default(cuid())
+  storeId     String
+  store       Store        @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  label       String
+  mode        String
+  secret      String?
+  uid         String?      @unique
+  lastCounter Int          @default(-1)
+  active      Boolean      @default(true)
+  // Stamps one tap of this card gives (a "+2" card for big orders).
+  stamps      Int          @default(1)
+  createdAt   DateTime     @default(now())
+  taps        TapSession[]
+}
+
+// One verified tap. Gives at most one stamp and unlocks redemption for a few minutes,
+// which proves the customer is physically at the counter.
+model TapSession {
+  id           String    @id @default(cuid())
+  storeId      String
+  store        Store     @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  tagId        String
+  tag          NfcTag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  userId       String?
+  stampApplied Boolean   @default(false)
+  redeemedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  expiresAt    DateTime
+}
+
+// The customer's card at one store. `balance` is the spendable stamp bank.
+// The web app is the source of truth; wallet passes only mirror it.
+model Membership {
+  id             String            @id @default(cuid())
+  userId         String
+  user           User              @relation(fields: [userId], references: [id])
+  storeId        String
+  store          Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  balance        Int               @default(0)
+  lifetimeStamps Int               @default(0)
+  lastStampAt    DateTime?
+  googleObjectId String?
+  // The customer turned off messages from this shop.
+  messagesOff    Boolean           @default(false)
+  // Year (in the shop's timezone) the birthday bonus was last given.
+  birthdayYear   Int?
+  createdAt      DateTime          @default(now())
+  events         StampEvent[]
+  deliveries     MessageDelivery[]
+
+  @@unique([userId, storeId])
+  @@index([storeId, createdAt])
+}
+
+// Ledger behind the merchant's live activity feed.
+// kind: "welcome" | "tap" | "redeem" | "adjust"
+model StampEvent {
+  id           String     @id @default(cuid())
+  storeId      String
+  store        Store      @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  membershipId String
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  kind         String
+  delta        Int
+  rewardName   String?
+  // Which reward a "redeem" was for, to enforce per-customer limits.
+  rewardId     String?
+  tagId        String?
+  // Why the shop adjusted the balance by hand ("adjust" events), shown to the customer.
+  note         String?
+  createdAt    DateTime   @default(now())
+
+  @@index([storeId, createdAt])
+  @@index([membershipId, kind])
+}
+
+// A message a shop sent to some of its customers (Wallet notification + web inbox).
+// audience: "all" | "lapsed" | "close" | "ready" | "new"
+model Message {
+  id           String            @id @default(cuid())
+  storeId      String
+  store        Store             @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  title        String
+  body         String
+  audience     String
+  // For "lapsed": no visit in this many days.
+  audienceDays Int?
+  recipients   Int               @default(0)
+  // How many recipients had the card in Google Wallet and were notified there.
+  walletSent   Int               @default(0)
+  createdAt    DateTime          @default(now())
+  deliveries   MessageDelivery[]
+
+  @@index([storeId, createdAt])
+}
+
+// One customer's copy of a message, for their inbox and read tracking.
+model MessageDelivery {
+  id           String     @id @default(cuid())
+  messageId    String
+  message      Message    @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  membershipId String
+  membership   Membership @relation(fields: [membershipId], references: [id], onDelete: Cascade)
+  readAt       DateTime?
+  createdAt    DateTime   @default(now())
+
+  @@unique([messageId, membershipId])
+  @@index([membershipId, createdAt])
+}
+
+// Happy hour: stamps are multiplied on these weekdays between these times (shop's timezone).
+model Promotion {
+  id         String   @id @default(cuid())
+  storeId    String
+  store      Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  name       String
+  // 2 = double stamps, 3 = triple.
+  multiplier Int
+  // ISO weekdays it runs on, Monday = 1: e.g. "12345" for Monday to Friday.
+  days       String
+  startTime  String
+  endTime    String
+  // Optional date range (inclusive, shop's local dates as YYYY-MM-DD).
+  startsOn   String?
+  endsOn     String?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+
+  @@index([storeId])
+}

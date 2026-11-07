@@ -1,0 +1,14 @@
+node_modules/
+.env
+*.db
+*.db-journal
+secrets/
+web/dist/
+server-dist/
+uploads/
+
+# Not part of the app
+*.mp4
+Blueprint.pdf
+.neon
+vercel-production.env

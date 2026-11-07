@@ -1,0 +1,51 @@
+{
+  "name": "regulr-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Regulr API, NFC verification, and Google Wallet service",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc",
+    "build:api": "esbuild src/app.ts --bundle --platform=node --format=esm --target=node20 --packages=external --outfile=server-dist/app.mjs",
+    "vercel-build": "node scripts/migrate-deploy.mjs && npm run build:api",
+    "start": "tsx src/server.ts",
+    "postinstall": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/sun.test.ts test/wallet.test.ts test/promotions.test.ts",
+    "tag:key": "tsx scripts/tag-key.ts"
+  },
+  "dependencies": {
+    "@neon/config": "^1.9.6",
+    "@neon/env": "^1.6.6",
+    "@prisma/client": "^6.10.0",
+    "@resvg/resvg-js": "^2.6.2",
+    "@vercel/blob": "^2.8.2",
+    "@vercel/functions": "^3.9.11",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0",
+    "google-auth-library": "^9.15.0",
+    "jsonwebtoken": "^9.0.2",
+    "qrcode": "^1.5.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/cookie-parser": "^1.4.7",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.0",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^22.10.0",
+    "@types/qrcode": "^1.5.5",
+    "esbuild": "^0.28.2",
+    "prisma": "^6.10.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
