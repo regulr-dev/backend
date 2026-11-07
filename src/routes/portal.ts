@@ -229,7 +229,7 @@ portalRouter.patch('/stores/:id/tags/:tagId', async (req, res) => {
 
 portalRouter.get('/stores/:id/qr.svg', async (req, res) => {
   const store = await ownedStore(res, req.params.id);
-  const svg = await QRCode.toString(`${config.publicUrl}/s/${store.slug}`, { type: 'svg', margin: 1, width: 512 });
+  const svg = await QRCode.toString(`${config.frontendUrl}/s/${store.slug}`, { type: 'svg', margin: 1, width: 512 });
   res.type('image/svg+xml').send(svg);
 });
 

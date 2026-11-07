@@ -2,6 +2,7 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import { authRouter } from './auth.js';
+import { config } from './config.js';
 import { errorHandler } from './errors.js';
 import { customerRouter } from './routes/customer.js';
 import { portalRouter } from './routes/portal.js';
@@ -46,6 +47,11 @@ app.use('/api/portal', portalRouter);
 app.use('/api', (_req, res) => {
   res.status(404).json({ error: 'not_found' });
 });
+
+// Redirect any direct web requests to the frontend app
+app.get('/s/:slug', (req, res) => res.redirect(`${config.frontendUrl}/s/${req.params.slug}`));
+app.get('/cards', (_req, res) => res.redirect(`${config.frontendUrl}/cards`));
+app.get('/portal*', (req, res) => res.redirect(`${config.frontendUrl}${req.originalUrl}`));
 
 // Only used without Vercel Blob (local development): uploads are on disk.
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));

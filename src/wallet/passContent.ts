@@ -76,4 +76,4 @@ export function passLinks(store: Store) {
 }
 
 /** The customer's own web card: claim rewards, see history and messages. */
-export const cardUrl = (store: Store) => `${config.publicUrl}/s/${store.slug}`;
+export const cardUrl = (store: Store) => `${config.frontendUrl}/s/${store.slug}`;

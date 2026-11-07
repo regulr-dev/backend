@@ -16,12 +16,12 @@ tapRouter.get('/t/:slug', async (req, res) => {
 
   const tag = await verifyTap(store.id, req.query);
   if (!tag) {
-    res.redirect(`/s/${store.slug}?tap_error=1`);
+    res.redirect(`${config.frontendUrl}/s/${store.slug}?tap_error=1`);
     return;
   }
 
   const tap = await prisma.tapSession.create({
     data: { storeId: store.id, tagId: tag.id, expiresAt: new Date(Date.now() + config.tapSessionMinutes * 60_000) },
   });
-  res.redirect(`/s/${store.slug}?tap=${tap.id}`);
+  res.redirect(`${config.frontendUrl}/s/${store.slug}?tap=${tap.id}`);
 });
