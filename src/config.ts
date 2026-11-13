@@ -40,7 +40,7 @@ if (devLogin && isProd) throw new Error('DEV_LOGIN must not be enabled in produc
 export const config = {
   port: Number(process.env.PORT ?? 3001),
   publicUrl: (process.env.PUBLIC_URL || vercelUrl || 'http://localhost:3001').replace(/\/$/, ''),
-  frontendUrl: (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, ''),
+  frontendUrl: (process.env.FRONTEND_URL || (isProd ? 'https://frontend-three-blush-64.vercel.app' : 'http://localhost:3000')).replace(/\/$/, ''),
   isProd,
   sessionSecret,
   devLogin,
