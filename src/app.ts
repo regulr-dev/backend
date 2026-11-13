@@ -51,7 +51,7 @@ app.use('/api', (_req, res) => {
 // Redirect any direct web requests to the frontend app
 app.get('/s/:slug', (req, res) => res.redirect(`${config.frontendUrl}/s/${req.params.slug}`));
 app.get('/cards', (_req, res) => res.redirect(`${config.frontendUrl}/cards`));
-app.get('/portal*', (req, res) => res.redirect(`${config.frontendUrl}${req.originalUrl}`));
+app.use('/portal', (req, res) => res.redirect(`${config.frontendUrl}${req.originalUrl}`));
 
 // Only used without Vercel Blob (local development): uploads are on disk.
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
