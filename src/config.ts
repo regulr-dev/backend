@@ -19,13 +19,18 @@ function googleWalletConfig() {
   const keyJson = process.env.GOOGLE_WALLET_KEY_JSON?.trim();
   const keyFile = process.env.GOOGLE_WALLET_KEY_FILE?.trim();
   if (!issuerId || (!keyJson && !keyFile)) return null;
-  const raw = keyJson
-    ? keyJson.startsWith('{')
-      ? keyJson
-      : Buffer.from(keyJson, 'base64').toString('utf8')
-    : readFileSync(keyFile!, 'utf8');
-  const key = JSON.parse(raw) as { client_email: string; private_key: string };
-  return { issuerId, clientEmail: key.client_email, privateKey: key.private_key };
+  try {
+    const raw = keyJson
+      ? keyJson.startsWith('{')
+        ? keyJson
+        : Buffer.from(keyJson, 'base64').toString('utf8')
+      : readFileSync(keyFile!, 'utf8');
+    const key = JSON.parse(raw) as { client_email: string; private_key: string };
+    return { issuerId, clientEmail: key.client_email, privateKey: key.private_key };
+  } catch (err) {
+    console.error('Failed to parse Google Wallet config:', err);
+    return null;
+  }
 }
 
 // On Vercel, fall back to the project's production domain when PUBLIC_URL isn't set.
