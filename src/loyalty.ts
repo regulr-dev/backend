@@ -122,7 +122,7 @@ export async function claimTap(userId: string, tapId: string): Promise<ClaimResu
   return { ...base, membership, stamped: true, added: total, happyHour: hh, birthdayBonus: birthday?.bonus ?? 0 };
 }
 
-/** Spend stamps on a reward. Needs a fresh tap from the same customer, which proves they're at the counter. */
+/** Claim a reward along the progressive ladder. The pointer stays at the reward and keeps moving forward until all rewards in the cycle are claimed, then the bar resets to zero. */
 export async function redeem(userId: string, storeId: string, rewardId: string, tapId: string) {
   const tap = await prisma.tapSession.findUnique({ where: { id: tapId } });
   if (!tap || tap.storeId !== storeId || tap.userId !== userId || tap.expiresAt < new Date()) {
@@ -139,21 +139,80 @@ export async function redeem(userId: string, storeId: string, rewardId: string, 
     const usedTap = await tx.tapSession.updateMany({ where: { id: tap.id, redeemedAt: null }, data: { redeemedAt: new Date() } });
     if (usedTap.count === 0) throw new HttpError(409, 'tap_already_used_for_reward');
 
-    const spent = await tx.membership.updateMany({
-      where: { userId, storeId, balance: { gte: reward.cost } },
-      data: { balance: { decrement: reward.cost } },
-    });
-    if (spent.count === 0) throw new HttpError(400, 'not_enough_stamps');
-
     const membership = await tx.membership.findUniqueOrThrow({ where: { userId_storeId: { userId, storeId } } });
+    if (membership.balance < reward.cost) throw new HttpError(400, 'not_enough_stamps');
+
+    // Per-customer lifetime limit check
     if (reward.perCustomerLimit !== null) {
       const claimed = await tx.stampEvent.count({ where: { membershipId: membership.id, kind: 'redeem', rewardId: reward.id } });
       if (claimed >= reward.perCustomerLimit) throw new HttpError(409, 'reward_limit_reached');
     }
-    const event = await tx.stampEvent.create({
-      data: { storeId, membershipId: membership.id, kind: 'redeem', delta: -reward.cost, rewardName: reward.name, rewardId: reward.id, tagId: tap.tagId },
+
+    // Check if this reward was already claimed in the current cycle
+    const lastReset = await tx.stampEvent.findFirst({
+      where: { membershipId: membership.id, kind: 'cycle_reset' },
+      orderBy: { createdAt: 'desc' },
     });
-    return { membership, redeemedAt: event.createdAt };
+    const currentClaims = await tx.stampEvent.findMany({
+      where: {
+        membershipId: membership.id,
+        kind: 'redeem',
+        rewardId: { not: null },
+        ...(lastReset ? { createdAt: { gt: lastReset.createdAt } } : {}),
+      },
+      select: { rewardId: true },
+    });
+    const claimedIds = currentClaims.map((c) => c.rewardId as string);
+    if (claimedIds.includes(reward.id)) {
+      throw new HttpError(409, 'reward_already_claimed_in_cycle');
+    }
+
+    const event = await tx.stampEvent.create({
+      data: {
+        storeId,
+        membershipId: membership.id,
+        kind: 'redeem',
+        delta: 0,
+        rewardName: reward.name,
+        rewardId: reward.id,
+        tagId: tap.tagId,
+      },
+    });
+
+    // Check if ALL active rewards on the ladder have now been claimed in this cycle
+    const activeRewards = await tx.reward.findMany({
+      where: { storeId, active: true },
+      orderBy: { cost: 'asc' },
+    });
+    const nextClaimedIds = [...claimedIds, reward.id];
+    const allClaimed = activeRewards.length > 0 && activeRewards.every((r) => nextClaimedIds.includes(r.id));
+
+    let finalMembership = membership;
+    if (allClaimed) {
+      // Cycle completed: all rewards claimed! Reset the bar to zero (carrying over any stamps beyond the top reward)
+      const maxCost = Math.max(...activeRewards.map((r) => r.cost));
+      const newBalance = Math.max(0, membership.balance - maxCost);
+      finalMembership = await tx.membership.update({
+        where: { id: membership.id },
+        data: { balance: newBalance },
+      });
+      await tx.stampEvent.create({
+        data: {
+          storeId,
+          membershipId: membership.id,
+          kind: 'cycle_reset',
+          delta: newBalance - membership.balance,
+          note: 'All rewards claimed! Completed ladder cycle.',
+        },
+      });
+    }
+
+    return {
+      membership: finalMembership,
+      redeemedAt: event.createdAt,
+      allClaimed,
+      cycleClaims: allClaimed ? [] : nextClaimedIds,
+    };
   });
 
   syncBalance(result.membership.id, { kind: 'redeem', rewardName: reward.name, cost: reward.cost });

@@ -8,7 +8,7 @@
 export const REWARD_ICONS = ['gift', 'coffee', 'drink', 'food', 'pizza', 'cake', 'percent', 'star'] as const;
 export type RewardIcon = (typeof REWARD_ICONS)[number];
 
-export type ProgressReward = { name: string; cost: number; icon?: string | null };
+export type ProgressReward = { id?: string; name: string; cost: number; icon?: string | null };
 
 export type StampProgress = {
   /** The next reward the customer can't afford yet, or the top reward once they can afford everything. */
@@ -21,11 +21,14 @@ export type StampProgress = {
 
 const byCost = (rewards: ProgressReward[]) => [...rewards].filter((r) => r.cost > 0).sort((a, b) => a.cost - b.cost);
 
-export function stampProgress(rewards: ProgressReward[], balance: number): StampProgress | null {
+export function stampProgress(rewards: ProgressReward[], balance: number, claimedIds?: string[]): StampProgress | null {
   const sorted = byCost(rewards);
   if (!sorted.length) return null;
-  const affordable = sorted.filter((r) => r.cost <= balance);
-  const goal = sorted.find((r) => r.cost > balance) ?? sorted[sorted.length - 1];
+  const isClaimed = (r: ProgressReward) => (claimedIds?.length ? claimedIds.includes(r.id ?? '') || claimedIds.includes(r.name) : false);
+  const unclaimed = sorted.filter((r) => !isClaimed(r));
+  const available = unclaimed.length ? unclaimed : sorted;
+  const affordable = available.filter((r) => r.cost <= balance && !isClaimed(r));
+  const goal = available.find((r) => r.cost > balance) ?? available[available.length - 1];
   return { goal, ready: affordable.length ? affordable[affordable.length - 1] : null, toGo: Math.max(0, goal.cost - balance) };
 }
 
@@ -142,6 +145,8 @@ type ArtOptions = {
   fg: string;
   balance: number;
   rewards: ProgressReward[];
+  /** IDs or names of rewards claimed in the current progressive ladder cycle. */
+  claimedIds?: string[];
   /** Cover photo: a URL on the web card, a data: URI when rendering the Wallet PNG. */
   photo?: string | null;
   /** Animate the "you are here" marker (web card, after a stamp). */

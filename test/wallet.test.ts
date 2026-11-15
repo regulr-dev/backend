@@ -36,6 +36,22 @@ test('progress points at the next reward the customer cannot afford yet', () => 
   assert.equal(stampProgress([], 3), null);
 });
 
+test('progressive ladder: claiming first reward keeps pointer and advances goal to next reward', () => {
+  // Customer has 5 stamps and claimed Espresso
+  const prog = stampProgress(menu, 5, ['Espresso']);
+  assert.equal(prog?.goal.name, 'Croissant');
+  assert.equal(prog?.ready, null);
+  assert.equal(prog?.toGo, 5); // 10 - 5 = 5 to go for Croissant
+});
+
+test('progressive ladder: reaching next reward milestone makes it ready to claim', () => {
+  // Customer has 10 stamps, Espresso already claimed in this cycle
+  const prog = stampProgress(menu, 10, ['Espresso']);
+  assert.equal(prog?.goal.name, 'Croissant');
+  assert.equal(prog?.ready?.name, 'Croissant');
+  assert.equal(prog?.toGo, 0);
+});
+
 test('the card picture escapes the photo URL', () => {
   const svg = stampArtSvg({ bg: '#000000', fg: '#ffffff', balance: 1, rewards: menu, photo: '/x.jpg"><script>' });
   assert.ok(!svg.includes('<script>'));

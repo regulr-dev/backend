@@ -49,8 +49,22 @@ export class GoogleWalletProvider implements WalletProvider {
    * card link. Sent in full on every update, so older passes pick up new fields too.
    */
   private async progressFields(store: Store, membership: Membership) {
-    const rewards = await prisma.reward.findMany({ where: { storeId: store.id, ...liveRewardWhere() }, select: { name: true, cost: true, icon: true } });
-    const progress = stampProgress(rewards, membership.balance);
+    const rewards = await prisma.reward.findMany({ where: { storeId: store.id, ...liveRewardWhere() }, select: { id: true, name: true, cost: true, icon: true } });
+    const lastReset = await prisma.stampEvent.findFirst({
+      where: { membershipId: membership.id, kind: 'cycle_reset' },
+      orderBy: { createdAt: 'desc' },
+    });
+    const currentClaims = await prisma.stampEvent.findMany({
+      where: {
+        membershipId: membership.id,
+        kind: 'redeem',
+        rewardId: { not: null },
+        ...(lastReset ? { createdAt: { gt: lastReset.createdAt } } : {}),
+      },
+      select: { rewardId: true },
+    });
+    const cycleClaims = currentClaims.map((c) => c.rewardId as string);
+    const progress = stampProgress(rewards, membership.balance, cycleClaims);
     const number = memberNumber(membership.id);
     const fields: Record<string, unknown> = {
       accountId: number,
