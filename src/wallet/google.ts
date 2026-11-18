@@ -71,7 +71,7 @@ export class GoogleWalletProvider implements WalletProvider {
       loyaltyPoints: { label: 'Stamps', balance: { int: membership.balance } },
       // The QR is the shop's join link, so a friend can scan it off your phone to join too.
       barcode: { type: 'QR_CODE', value: cardUrl(store), alternateText: `Member ${number}` },
-      linksModuleData: { uris: [{ id: 'card', uri: cardUrl(store), description: 'Open my card: claim rewards, history, messages' }] },
+      linksModuleData: { uris: [{ id: 'card', uri: cardUrl(store, membership), description: 'Open my card: claim rewards, history, messages' }] },
     };
     if (!progress) return fields;
     fields.secondaryLoyaltyPoints =

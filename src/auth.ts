@@ -76,6 +76,25 @@ authRouter.post('/auth/google', async (req, res) => {
   res.json({ user: { id: user.id, email: user.email, name: user.name } });
 });
 
+authRouter.post('/auth/customer-login', async (req, res) => {
+  const body = z.object({ email: z.string().trim().email().max(200) }).parse(req.body);
+  const email = body.email.toLowerCase().trim();
+  const user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    throw new HttpError(404, 'user_not_found', 'No loyalty cards found for this email address.');
+  }
+  setSession(res, user.id);
+  res.json({
+    user: {
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      birthMonth: user.birthMonth,
+      birthDay: user.birthDay,
+    },
+  });
+});
+
 authRouter.post('/auth/dev', async (req, res) => {
   if (!config.devLogin) throw new HttpError(404, 'not_found');
   const body = z.object({ email: z.string().email(), name: z.string().max(80).optional() }).parse(req.body);

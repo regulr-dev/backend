@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { Membership } from '@prisma/client';
+import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
@@ -62,11 +63,27 @@ customerRouter.get('/stores', async (req, res) => {
 // Everything the card page needs in one round trip: store, who's signed in, their card,
 // and (after an NFC tap) the stamp result. Taps happen at a busy counter, so speed matters.
 customerRouter.post('/stores/:slug/open', async (req, res) => {
-  const { tapId } = z.object({ tapId: z.string().optional() }).parse(req.body ?? {});
+  const { tapId, passToken } = z.object({ tapId: z.string().optional(), passToken: z.string().optional() }).parse(req.body ?? {});
   const store = await storeBySlug(String(req.params.slug));
-  const [rewards, user, promotions] = await Promise.all([
+  let user = await getUser(req);
+
+  // If opened from a Google Wallet pass link while logged out, auto-authenticate:
+  if (!user && passToken) {
+    try {
+      const payload = jwt.verify(passToken, config.sessionSecret) as jwt.JwtPayload;
+      if (payload?.sub) {
+        user = await prisma.user.findUnique({ where: { id: payload.sub } });
+        if (user) {
+          setSession(res, user.id);
+        }
+      }
+    } catch {
+      // invalid or expired pass token, proceed as guest
+    }
+  }
+
+  const [rewards, promotions] = await Promise.all([
     prisma.reward.findMany({ where: { storeId: store.id, ...liveRewardWhere() }, orderBy: { cost: 'asc' }, select: rewardSelect }),
-    getUser(req),
     prisma.promotion.findMany({ where: { storeId: store.id, active: true } }),
   ]);
   const base = { config: publicConfig(), store: publicStore(store, rewards), happyHours: happyHourStatus(promotions, store.timezone) };

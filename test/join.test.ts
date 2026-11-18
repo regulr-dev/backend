@@ -36,3 +36,14 @@ test('join payload validation rejects empty name or invalid email', () => {
   assert.throws(() => joinSchema.parse({ name: '', email: 'valid@example.com' }));
   assert.throws(() => joinSchema.parse({ name: 'Valid Name', email: 'invalid-email' }));
 });
+
+const loginSchema = z.object({ email: z.string().trim().email().max(200) });
+
+test('customer-login payload validation accepts valid email and normalizes it', () => {
+  const parsed = loginSchema.parse({ email: 'Customer@Example.com' });
+  assert.equal(parsed.email.toLowerCase().trim(), 'customer@example.com');
+});
+
+test('customer-login payload validation rejects invalid email', () => {
+  assert.throws(() => loginSchema.parse({ email: 'not-an-email' }));
+});

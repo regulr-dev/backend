@@ -1,4 +1,5 @@
-import type { Promotion, Reward, Store } from '@prisma/client';
+import type { Membership, Promotion, Reward, Store } from '@prisma/client';
+import jwt from 'jsonwebtoken';
 import { describeDays, localTime } from '../../shared/promotions.js';
 import { config } from '../config.js';
 import { parseHours } from '../stores.js';
@@ -76,4 +77,12 @@ export function passLinks(store: Store) {
 }
 
 /** The customer's own web card: claim rewards, see history and messages. */
-export const cardUrl = (store: Store) => `${config.frontendUrl}/s/${store.slug}`;
+export const cardUrl = (store: Store, membership?: Membership) => {
+  if (!membership) return `${config.frontendUrl}/s/${store.slug}`;
+  const passToken = jwt.sign(
+    { sub: membership.userId, storeId: store.id, mid: membership.id },
+    config.sessionSecret,
+    { expiresIn: '365d' },
+  );
+  return `${config.frontendUrl}/s/${store.slug}?passToken=${passToken}`;
+};
