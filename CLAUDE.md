@@ -83,3 +83,4 @@ backend/
   - `GOOGLE_WALLET_KEY_JSON`
   - `PUBLIC_URL` (Backend Vercel URL)
   - `FRONTEND_URL` (Frontend Vercel URL)
+

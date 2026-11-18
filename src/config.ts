@@ -1,5 +1,6 @@
 import 'dotenv/config';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import path from 'node:path';
 
 const isProd = process.env.NODE_ENV === 'production';
 
@@ -20,11 +21,24 @@ function googleWalletConfig() {
   const keyFile = process.env.GOOGLE_WALLET_KEY_FILE?.trim();
   if (!issuerId || (!keyJson && !keyFile)) return null;
   try {
-    const raw = keyJson
-      ? keyJson.startsWith('{')
+    let raw: string;
+    if (keyJson) {
+      raw = keyJson.startsWith('{')
         ? keyJson
-        : Buffer.from(keyJson, 'base64').toString('utf8')
-      : readFileSync(keyFile!, 'utf8');
+        : Buffer.from(keyJson, 'base64').toString('utf8');
+    } else {
+      let resolved = keyFile!;
+      if (!existsSync(resolved)) {
+        if (existsSync(path.resolve(process.cwd(), resolved))) {
+          resolved = path.resolve(process.cwd(), resolved);
+        } else if (existsSync(path.resolve(process.cwd(), 'backend', resolved))) {
+          resolved = path.resolve(process.cwd(), 'backend', resolved);
+        } else if (existsSync(path.resolve(process.cwd(), '..', resolved))) {
+          resolved = path.resolve(process.cwd(), '..', resolved);
+        }
+      }
+      raw = readFileSync(resolved, 'utf8');
+    }
     const key = JSON.parse(raw) as { client_email: string; private_key: string };
     return { issuerId, clientEmail: key.client_email, privateKey: key.private_key };
   } catch (err) {

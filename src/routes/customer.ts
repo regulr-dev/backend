@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { prisma } from '../db.js';
 import { HttpError } from '../errors.js';
-import { clearSession, currentUser, getUser, requireUser } from '../auth.js';
+import { clearSession, currentUser, getUser, requireUser, setSession } from '../auth.js';
 import { claimTap, joinStore, redeem } from '../loyalty.js';
 import { happyHourStatus, liveRewardWhere, publicRewardSelect as rewardSelect } from '../rewards.js';
 import { publicStore } from '../stores.js';
@@ -103,6 +103,92 @@ customerRouter.post('/stores/:slug/open', async (req, res) => {
   res.json({
     ...base,
     user: { name: user.name, email: user.email },
+    joined,
+    tap,
+    membership: publicMembership(membership),
+    claims: Object.fromEntries(claims.map((c) => [c.rewardId, c._count._all])),
+  });
+});
+
+// Frictionless customer join at the counter: Name, Email, Birthday
+customerRouter.post('/stores/:slug/join', async (req, res) => {
+  const body = z
+    .object({
+      name: z.string().trim().min(1, 'Please enter your name').max(100),
+      email: z.string().trim().email('Please enter a valid email address').max(200),
+      birthMonth: z.number().int().min(1).max(12).optional().nullable(),
+      birthDay: z.number().int().min(1).max(31).optional().nullable(),
+      tapId: z.string().optional(),
+    })
+    .parse(req.body ?? {});
+
+  const store = await storeBySlug(String(req.params.slug));
+  const email = body.email.toLowerCase().trim();
+
+  // Find or create customer account
+  let user = await prisma.user.findUnique({ where: { email } });
+  if (!user) {
+    user = await prisma.user.create({
+      data: {
+        email,
+        name: body.name.trim(),
+        birthMonth: body.birthMonth ?? null,
+        birthDay: body.birthDay ?? null,
+      },
+    });
+  } else {
+    // If returning user, update name and birthday if provided
+    user = await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        name: body.name.trim() || user.name,
+        birthMonth: body.birthMonth ?? user.birthMonth,
+        birthDay: body.birthDay ?? user.birthDay,
+      },
+    });
+  }
+
+  // Set long-lived authentication session cookie
+  setSession(res, user.id);
+
+  // Join store and award welcome stamps
+  let { membership, joined } = await joinStore(user.id, store.id);
+
+  let tap = null;
+  if (body.tapId) {
+    try {
+      const result = await claimTap(user.id, body.tapId);
+      membership = result.membership;
+      tap = {
+        stamped: result.stamped,
+        added: result.added,
+        happyHour: result.happyHour,
+        birthdayBonus: result.birthdayBonus,
+        reason: result.reason,
+        nextStampAt: result.nextStampAt,
+        expiresAt: result.tapExpiresAt,
+      };
+    } catch (err) {
+      if (!(err instanceof HttpError)) throw err;
+      tap = { error: err.code };
+    }
+  }
+
+  const [rewards, promotions] = await Promise.all([
+    prisma.reward.findMany({ where: { storeId: store.id, ...liveRewardWhere() }, orderBy: { cost: 'asc' }, select: rewardSelect }),
+    prisma.promotion.findMany({ where: { storeId: store.id, active: true } }),
+  ]);
+
+  const limited = rewards.filter((r) => r.perCustomerLimit !== null).map((r) => r.id);
+  const claims = limited.length
+    ? await prisma.stampEvent.groupBy({ by: ['rewardId'], where: { membershipId: membership.id, kind: 'redeem', rewardId: { in: limited } }, _count: { _all: true } })
+    : [];
+
+  const base = { config: publicConfig(), store: publicStore(store, rewards), happyHours: happyHourStatus(promotions, store.timezone) };
+
+  res.json({
+    ...base,
+    user: { id: user.id, name: user.name, email: user.email, birthMonth: user.birthMonth, birthDay: user.birthDay },
     joined,
     tap,
     membership: publicMembership(membership),

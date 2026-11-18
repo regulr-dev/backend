@@ -14,7 +14,7 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test test/sun.test.ts test/wallet.test.ts test/promotions.test.ts",
+    "test": "tsx --test test/sun.test.ts test/wallet.test.ts test/promotions.test.ts test/join.test.ts",
     "tag:key": "tsx scripts/tag-key.ts"
   },
   "dependencies": {
