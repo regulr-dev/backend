@@ -201,6 +201,21 @@ customerRouter.post('/stores/:slug/join', async (req, res) => {
     ? await prisma.stampEvent.groupBy({ by: ['rewardId'], where: { membershipId: membership.id, kind: 'redeem', rewardId: { in: limited } }, _count: { _all: true } })
     : [];
 
+  const lastReset = await prisma.stampEvent.findFirst({
+    where: { membershipId: membership.id, kind: 'cycle_reset' },
+    orderBy: { createdAt: 'desc' },
+  });
+  const currentClaims = await prisma.stampEvent.findMany({
+    where: {
+      membershipId: membership.id,
+      kind: 'redeem',
+      rewardId: { not: null },
+      ...(lastReset ? { createdAt: { gt: lastReset.createdAt } } : {}),
+    },
+    select: { rewardId: true },
+  });
+  const cycleClaims = currentClaims.map((c) => c.rewardId as string);
+
   const base = { config: publicConfig(), store: publicStore(store, rewards), happyHours: happyHourStatus(promotions, store.timezone) };
 
   res.json({
@@ -210,6 +225,7 @@ customerRouter.post('/stores/:slug/join', async (req, res) => {
     tap,
     membership: publicMembership(membership),
     claims: Object.fromEntries(claims.map((c) => [c.rewardId, c._count._all])),
+    cycleClaims,
   });
 });
 
