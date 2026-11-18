@@ -9,7 +9,9 @@ if (!env.DATABASE_URL) {
   process.exit(1);
 }
 if (!env.DATABASE_URL_UNPOOLED) {
-  env.DATABASE_URL_UNPOOLED = env.DATABASE_URL.replace('-pooler.', '.');
-  console.log('DATABASE_URL_UNPOOLED is not set: using DATABASE_URL without the pooler for migrations.');
+  env.DATABASE_URL_UNPOOLED = env.DATABASE_URL.includes('-pooler.')
+    ? env.DATABASE_URL.replace('-pooler.', '.')
+    : env.DATABASE_URL;
+  console.log('DATABASE_URL_UNPOOLED is not set: using direct DATABASE_URL for migrations.');
 }
 execSync('npx prisma migrate deploy', { stdio: 'inherit', env });
